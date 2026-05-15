@@ -8,6 +8,7 @@ import { Box, CircularProgress } from '@mui/material'
 
 const Home = lazy(() => import('@/pages/Home'))
 const Catalog = lazy(() => import('@/pages/Catalog'))
+const ProductDetail = lazy(() => import('@/pages/ProductDetail'))
 const Login = lazy(() => import('@/pages/Login'))
 const Register = lazy(() => import('@/pages/Register'))
 const Account = lazy(() => import('@/pages/Account'))
@@ -40,6 +41,7 @@ function App() {
               <Route element={<PageLayout />}>
                 <Route path="/" element={<Home />} />
                 <Route path="/catalog" element={<Catalog />} />
+                <Route path="/product/:slug" element={<ProductDetail />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
                 <Route path="/account" element={<Account />} />
