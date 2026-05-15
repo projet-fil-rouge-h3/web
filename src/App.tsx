@@ -10,6 +10,7 @@ const Home = lazy(() => import('@/pages/Home'))
 const Catalog = lazy(() => import('@/pages/Catalog'))
 const Login = lazy(() => import('@/pages/Login'))
 const Register = lazy(() => import('@/pages/Register'))
+const Account = lazy(() => import('@/pages/Account'))
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -41,6 +42,7 @@ function App() {
                 <Route path="/catalog" element={<Catalog />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
+                <Route path="/account" element={<Account />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>
             </Routes>
