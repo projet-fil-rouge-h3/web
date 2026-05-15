@@ -8,9 +8,12 @@ import { Box, CircularProgress } from '@mui/material'
 
 const Home = lazy(() => import('@/pages/Home'))
 const Catalog = lazy(() => import('@/pages/Catalog'))
+const ProductDetail = lazy(() => import('@/pages/ProductDetail'))
+const Cart = lazy(() => import('@/pages/Cart'))
 const Contact = lazy(() => import('@/pages/Contact'))
 const Login = lazy(() => import('@/pages/Login'))
 const Register = lazy(() => import('@/pages/Register'))
+const Account = lazy(() => import('@/pages/Account'))
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -40,9 +43,12 @@ function App() {
               <Route element={<PageLayout />}>
                 <Route path="/" element={<Home />} />
                 <Route path="/catalog" element={<Catalog />} />
+                <Route path="/product/:slug" element={<ProductDetail />} />
+                <Route path="/cart" element={<Cart />} />
                 <Route path="/contact" element={<Contact />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
+                <Route path="/account" element={<Account />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>
             </Routes>
