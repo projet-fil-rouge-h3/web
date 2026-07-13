@@ -19,7 +19,7 @@ import VisibilityIcon from '@mui/icons-material/Visibility'
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff'
 import SecurityIcon from '@mui/icons-material/Security'
 import { Link, useNavigate } from 'react-router-dom'
-import { useAuthStore } from '@/stores/authStore'
+import { authApi } from '@/services/auth'
 
 const schema = z.object({
   email: z.string().email('Adresse e-mail invalide'),
@@ -32,7 +32,6 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const navigate = useNavigate()
-  const setUser = useAuthStore((s) => s.setUser)
 
   const {
     register,
@@ -43,9 +42,7 @@ export default function Login() {
   const onSubmit = async (data: FormData) => {
     setError(null)
     try {
-      // Authentification simulée — remplacer par api.post('/auth/login', data) quand le backend est prêt
-      await new Promise((resolve) => setTimeout(resolve, 700))
-      setUser({ id: '1', email: data.email, firstName: 'Demo', lastName: 'User', role: 'USER' })
+      await authApi.login(data)
       navigate('/')
     } catch {
       setError('Identifiants incorrects. Veuillez réessayer.')

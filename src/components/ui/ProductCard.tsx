@@ -11,6 +11,7 @@ import {
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart'
 import { useNavigate } from 'react-router-dom'
 import { useCartStore } from '@/stores/cartStore'
+import { productImage } from '@/assets/products'
 import type { Product } from '@/types'
 
 interface Props {
@@ -57,20 +58,28 @@ export default function ProductCard({ product }: Props) {
         onClick={() => navigate(`/product/${product.slug}`)}
         sx={{ flexGrow: 1 }}
       >
-        {/* Image placeholder colorée */}
-        <Box
-          sx={{
-            height: 140,
-            background: 'linear-gradient(135deg, #EEF2FF 0%, #E8F0FE 100%)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Typography variant="h3" sx={{ opacity: 0.12, userSelect: 'none', fontWeight: 700 }}>
-            {product.name.slice(0, 3).toUpperCase()}
-          </Typography>
-        </Box>
+        {productImage(product) ? (
+          <Box
+            component="img"
+            src={productImage(product)}
+            alt={product.name}
+            sx={{ height: 140, width: '100%', objectFit: 'cover', display: 'block' }}
+          />
+        ) : (
+          <Box
+            sx={{
+              height: 140,
+              background: 'linear-gradient(135deg, #EEF2FF 0%, #E8F0FE 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Typography variant="h3" sx={{ opacity: 0.12, userSelect: 'none', fontWeight: 700 }}>
+              {product.name.slice(0, 3).toUpperCase()}
+            </Typography>
+          </Box>
+        )}
 
         <CardContent sx={{ pb: 1 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>

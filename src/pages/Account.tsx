@@ -3,6 +3,7 @@ import { Navigate, useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Box,
   Container,
@@ -23,6 +24,7 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  Skeleton,
 } from '@mui/material'
 import {
   Logout as LogoutIcon,
@@ -31,8 +33,14 @@ import {
   HomeOutlined as HomeIcon,
   ShoppingBagOutlined as ShoppingBagIcon,
   PersonOutlined as PersonIcon,
+  ReceiptLongOutlined as ReceiptIcon,
+  DownloadOutlined as DownloadIcon,
 } from '@mui/icons-material'
 import { useAuthStore } from '@/stores/authStore'
+import { authApi } from '@/services/auth'
+import { ordersApi } from '@/services/orders'
+import { addressesApi, type AddressPayload } from '@/services/addresses'
+import { invoicesApi, type Invoice } from '@/services/invoices'
 
 // ── Schémas Zod ───────────────────────────────────────────────────────────────
 
@@ -45,95 +53,44 @@ const addressSchema = z.object({
   label: z.string().min(1, 'Libellé requis'),
   street: z.string().min(5, 'Adresse requise'),
   city: z.string().min(2, 'Ville requise'),
-  zipCode: z.string().min(4, 'Code postal requis'),
+  postalCode: z.string().min(4, 'Code postal requis'),
   country: z.string().min(2, 'Pays requis'),
 })
 
 type ProfileData = z.infer<typeof profileSchema>
 type AddressData = z.infer<typeof addressSchema>
 
-// ── Types & données mock ──────────────────────────────────────────────────────
+// ── Libellés ──────────────────────────────────────────────────────────────────
 
-interface MockOrderItem {
-  name: string
-  price: number
-  quantity: number
-  billingCycle: string
-}
-
-interface MockOrder {
-  id: string
-  date: string
-  status: 'PENDING' | 'CONFIRMED' | 'CANCELLED'
-  total: number
-  items: MockOrderItem[]
-}
-
-interface MockAddress {
-  id: string
-  label: string
-  street: string
-  city: string
-  zipCode: string
-  country: string
-  isDefault: boolean
-}
-
-const MOCK_ORDERS: MockOrder[] = [
-  {
-    id: 'ORD-2026-001',
-    date: '2026-03-15',
-    status: 'CONFIRMED',
-    total: 498,
-    items: [
-      { name: 'SOC Starter', price: 299, quantity: 1, billingCycle: 'MONTHLY' },
-      { name: 'EDR Pro', price: 199, quantity: 1, billingCycle: 'MONTHLY' },
-    ],
-  },
-  {
-    id: 'ORD-2026-002',
-    date: '2026-04-01',
-    status: 'CONFIRMED',
-    total: 799,
-    items: [{ name: 'XDR Ultimate', price: 799, quantity: 1, billingCycle: 'MONTHLY' }],
-  },
-  {
-    id: 'ORD-2026-003',
-    date: '2026-04-20',
-    status: 'PENDING',
-    total: 999,
-    items: [{ name: 'SOC Enterprise', price: 999, quantity: 1, billingCycle: 'MONTHLY' }],
-  },
-]
-
-const INITIAL_ADDRESSES: MockAddress[] = [
-  {
-    id: '1',
-    label: 'Siège social',
-    street: '42 Rue de la Paix',
-    city: 'Paris',
-    zipCode: '75001',
-    country: 'France',
-    isDefault: true,
-  },
-]
-
-const STATUS_COLOR: Record<string, 'success' | 'warning' | 'error'> = {
+const STATUS_COLOR: Record<string, 'success' | 'warning' | 'error' | 'default'> = {
   CONFIRMED: 'success',
+  COMPLETED: 'success',
   PENDING: 'warning',
+  PROCESSING: 'warning',
   CANCELLED: 'error',
+  REFUNDED: 'default',
 }
 
 const STATUS_LABEL: Record<string, string> = {
   CONFIRMED: 'Confirmée',
+  COMPLETED: 'Terminée',
   PENDING: 'En attente',
+  PROCESSING: 'En cours',
   CANCELLED: 'Annulée',
+  REFUNDED: 'Remboursée',
 }
 
 const BILLING_LABEL: Record<string, string> = {
   MONTHLY: 'Mensuel',
   YEARLY: 'Annuel',
   ONE_TIME: 'Unique',
+}
+
+/** Masque la partie locale de l'e-mail : merlin.cdl@gmail.com → m•••@gmail.com */
+function maskEmail(email: string): string {
+  const [local, domain] = email.split('@')
+  if (!domain) return email
+  return `${local[0]}•••@${domain}`
 }
 
 // ── Composant panneau d'onglet ────────────────────────────────────────────────
@@ -145,14 +102,63 @@ function TabPanel({ children, value, index }: { children: React.ReactNode; value
 // ── Page principale ───────────────────────────────────────────────────────────
 
 export default function Account() {
-  const { user, isAuthenticated, setUser, logout } = useAuthStore()
+  const { user, isAuthenticated } = useAuthStore()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
 
   const [tab, setTab] = useState(0)
   const [profileSuccess, setProfileSuccess] = useState(false)
-  const [addresses, setAddresses] = useState<MockAddress[]>(INITIAL_ADDRESSES)
+  const [actionError, setActionError] = useState<string | null>(null)
   const [addressDialogOpen, setAddressDialogOpen] = useState(false)
 
+  // ── Données serveur (chargées seulement si connecté) ───────────
+  const { data: ordersPage, isLoading: ordersLoading } = useQuery({
+    queryKey: ['orders', 'mine'],
+    queryFn: () => ordersApi.getMyOrders(0, 20),
+    enabled: isAuthenticated,
+  })
+
+  const { data: addresses = [], isLoading: addressesLoading } = useQuery({
+    queryKey: ['addresses'],
+    queryFn: addressesApi.getAll,
+    enabled: isAuthenticated,
+  })
+
+  const { data: invoicesPage, isLoading: invoicesLoading } = useQuery({
+    queryKey: ['invoices'],
+    queryFn: () => invoicesApi.getAll(),
+    enabled: isAuthenticated,
+  })
+
+  // ── Mutations adresses ──────────────────────────────────────────
+  const invalidateAddresses = () => queryClient.invalidateQueries({ queryKey: ['addresses'] })
+
+  const createAddress = useMutation({
+    mutationFn: (payload: AddressPayload) => addressesApi.create(payload),
+    onSuccess: () => {
+      invalidateAddresses()
+      setAddressDialogOpen(false)
+      addressForm.reset({ country: 'France' })
+    },
+    onError: () => setActionError("L'ajout de l'adresse a échoué."),
+  })
+
+  const setDefaultAddress = useMutation({
+    mutationFn: (id: string) => {
+      const address = addresses.find((a) => a.id === id)!
+      return addressesApi.update(id, { ...address, isDefault: true })
+    },
+    onSuccess: invalidateAddresses,
+    onError: () => setActionError('Impossible de définir cette adresse par défaut.'),
+  })
+
+  const removeAddress = useMutation({
+    mutationFn: (id: string) => addressesApi.remove(id),
+    onSuccess: invalidateAddresses,
+    onError: () => setActionError('La suppression a échoué.'),
+  })
+
+  // ── Formulaires ─────────────────────────────────────────────────
   const profileForm = useForm<ProfileData>({
     resolver: zodResolver(profileSchema),
     defaultValues: {
@@ -172,36 +178,36 @@ export default function Account() {
   }
 
   const initials = `${user.firstName[0]}${user.lastName[0]}`.toUpperCase()
+  const orders = ordersPage?.content ?? []
+  const invoices = invoicesPage?.content ?? []
 
   const onProfileSubmit = async (data: ProfileData) => {
-    await new Promise((resolve) => setTimeout(resolve, 600))
-    setUser({ ...user, ...data })
-    setProfileSuccess(true)
-    setTimeout(() => setProfileSuccess(false), 3500)
-  }
-
-  const onAddressSubmit = async (data: AddressData) => {
-    await new Promise((resolve) => setTimeout(resolve, 600))
-    const newAddress: MockAddress = {
-      id: String(Date.now()),
-      ...data,
-      isDefault: addresses.length === 0,
+    setActionError(null)
+    try {
+      await authApi.updateProfile(data)
+      setProfileSuccess(true)
+      setTimeout(() => setProfileSuccess(false), 3500)
+    } catch {
+      setActionError('La mise à jour du profil a échoué.')
     }
-    setAddresses((prev) => [...prev, newAddress])
-    setAddressDialogOpen(false)
-    addressForm.reset({ country: 'France' })
   }
 
-  const removeAddress = (id: string) => {
-    setAddresses((prev) => prev.filter((a) => a.id !== id))
+  const onAddressSubmit = (data: AddressData) => {
+    setActionError(null)
+    createAddress.mutate({ ...data, isDefault: addresses.length === 0 })
   }
 
-  const setDefaultAddress = (id: string) => {
-    setAddresses((prev) => prev.map((a) => ({ ...a, isDefault: a.id === id })))
+  const handleDownloadInvoice = async (invoice: Invoice) => {
+    setActionError(null)
+    try {
+      await invoicesApi.downloadPdf(invoice)
+    } catch {
+      setActionError('Le téléchargement de la facture a échoué.')
+    }
   }
 
-  const handleLogout = () => {
-    logout()
+  const handleLogout = async () => {
+    await authApi.logout()
     navigate('/')
   }
 
@@ -251,7 +257,7 @@ export default function Account() {
                   )}
                 </Box>
                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                  {user.email}
+                  {maskEmail(user.email)}
                 </Typography>
               </Box>
             </Box>
@@ -267,12 +273,19 @@ export default function Account() {
           </Box>
         </Paper>
 
+        {actionError && (
+          <Alert severity="error" sx={{ mb: 3 }} onClose={() => setActionError(null)}>
+            {actionError}
+          </Alert>
+        )}
+
         {/* ── Onglets ─────────────────────────────────────────────────── */}
         <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-          <Tabs value={tab} onChange={(_, v) => setTab(v)}>
+          <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="scrollable" allowScrollButtonsMobile>
             <Tab icon={<PersonIcon />} iconPosition="start" label="Mon profil" />
             <Tab icon={<ShoppingBagIcon />} iconPosition="start" label="Mes commandes" />
             <Tab icon={<HomeIcon />} iconPosition="start" label="Mes adresses" />
+            <Tab icon={<ReceiptIcon />} iconPosition="start" label="Mes factures" />
           </Tabs>
         </Box>
 
@@ -317,7 +330,7 @@ export default function Account() {
                   <Grid size={{ xs: 12 }}>
                     <TextField
                       label="Adresse e-mail"
-                      value={user.email}
+                      value={maskEmail(user.email)}
                       fullWidth
                       disabled
                       helperText="L'adresse e-mail ne peut pas être modifiée ici."
@@ -349,7 +362,13 @@ export default function Account() {
             Historique des commandes
           </Typography>
 
-          {MOCK_ORDERS.length === 0 ? (
+          {ordersLoading ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} variant="rounded" height={120} />
+              ))}
+            </Box>
+          ) : orders.length === 0 ? (
             <Box sx={{ textAlign: 'center', py: 8 }}>
               <ShoppingBagIcon sx={{ fontSize: 56, color: 'text.disabled', mb: 2 }} />
               <Typography sx={{ color: 'text.secondary', mb: 2 }}>
@@ -361,7 +380,7 @@ export default function Account() {
             </Box>
           ) : (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {MOCK_ORDERS.map((order) => (
+              {orders.map((order) => (
                 <Paper
                   key={order.id}
                   elevation={0}
@@ -379,10 +398,10 @@ export default function Account() {
                   >
                     <Box>
                       <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                        {order.id}
+                        Commande {order.id.slice(0, 8).toUpperCase()}
                       </Typography>
                       <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                        {new Date(order.date).toLocaleDateString('fr-FR', {
+                        {new Date(order.createdAt).toLocaleDateString('fr-FR', {
                           year: 'numeric',
                           month: 'long',
                           day: 'numeric',
@@ -391,34 +410,34 @@ export default function Account() {
                     </Box>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                       <Chip
-                        label={STATUS_LABEL[order.status]}
-                        color={STATUS_COLOR[order.status]}
+                        label={STATUS_LABEL[order.status] ?? order.status}
+                        color={STATUS_COLOR[order.status] ?? 'default'}
                         size="small"
                       />
                       <Typography
                         variant="subtitle1"
                         sx={{ fontWeight: 700, color: 'primary.main' }}
                       >
-                        {order.total.toLocaleString('fr-FR')} €/mois
+                        {order.totalAmount.toLocaleString('fr-FR')} € HT
                       </Typography>
                     </Box>
                   </Box>
 
                   <Divider sx={{ mb: 2 }} />
 
-                  {order.items.map((item, i) => (
+                  {order.items.map((item) => (
                     <Box
-                      key={i}
+                      key={item.id}
                       sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.75 }}
                     >
                       <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                        {item.name} × {item.quantity}{' '}
+                        {item.productName} × {item.quantity}{' '}
                         <Box component="span" sx={{ color: 'text.disabled' }}>
-                          ({BILLING_LABEL[item.billingCycle] ?? item.billingCycle})
+                          ({BILLING_LABEL[item.billingPeriod] ?? item.billingPeriod})
                         </Box>
                       </Typography>
                       <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                        {(item.price * item.quantity).toLocaleString('fr-FR')} €
+                        {(item.unitPrice * item.quantity).toLocaleString('fr-FR')} €
                       </Typography>
                     </Box>
                   ))}
@@ -450,7 +469,15 @@ export default function Account() {
             </Button>
           </Box>
 
-          {addresses.length === 0 ? (
+          {addressesLoading ? (
+            <Grid container spacing={2}>
+              {Array.from({ length: 2 }).map((_, i) => (
+                <Grid key={i} size={{ xs: 12, sm: 6, md: 4 }}>
+                  <Skeleton variant="rounded" height={180} />
+                </Grid>
+              ))}
+            </Grid>
+          ) : addresses.length === 0 ? (
             <Box sx={{ textAlign: 'center', py: 8 }}>
               <HomeIcon sx={{ fontSize: 56, color: 'text.disabled', mb: 2 }} />
               <Typography sx={{ color: 'text.secondary' }}>
@@ -493,7 +520,7 @@ export default function Account() {
                       {address.street}
                     </Typography>
                     <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                      {address.zipCode} {address.city}
+                      {address.postalCode} {address.city}
                     </Typography>
                     <Typography variant="body2" sx={{ color: 'text.secondary', mb: 'auto', pb: 2 }}>
                       {address.country}
@@ -504,7 +531,8 @@ export default function Account() {
                         <Button
                           size="small"
                           variant="text"
-                          onClick={() => setDefaultAddress(address.id)}
+                          onClick={() => setDefaultAddress.mutate(address.id)}
+                          disabled={setDefaultAddress.isPending}
                           sx={{ flexGrow: 1 }}
                         >
                           Définir par défaut
@@ -513,8 +541,8 @@ export default function Account() {
                       <IconButton
                         size="small"
                         color="error"
-                        onClick={() => removeAddress(address.id)}
-                        disabled={address.isDefault}
+                        onClick={() => removeAddress.mutate(address.id)}
+                        disabled={address.isDefault || removeAddress.isPending}
                         aria-label="Supprimer l'adresse"
                         sx={{ ml: 'auto' }}
                       >
@@ -525,6 +553,73 @@ export default function Account() {
                 </Grid>
               ))}
             </Grid>
+          )}
+        </TabPanel>
+
+        {/* ── Onglet : Factures ────────────────────────────────────────── */}
+        <TabPanel value={tab} index={3}>
+          <Typography variant="h6" sx={{ fontWeight: 700, mb: 3 }}>
+            Mes factures
+          </Typography>
+
+          {invoicesLoading ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {Array.from({ length: 2 }).map((_, i) => (
+                <Skeleton key={i} variant="rounded" height={72} />
+              ))}
+            </Box>
+          ) : invoices.length === 0 ? (
+            <Box sx={{ textAlign: 'center', py: 8 }}>
+              <ReceiptIcon sx={{ fontSize: 56, color: 'text.disabled', mb: 2 }} />
+              <Typography sx={{ color: 'text.secondary' }}>
+                Aucune facture — elles apparaissent après votre première commande.
+              </Typography>
+            </Box>
+          ) : (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              {invoices.map((invoice) => (
+                <Paper
+                  key={invoice.id}
+                  elevation={0}
+                  sx={{
+                    p: 2.5,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    borderRadius: 2,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 2,
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <ReceiptIcon sx={{ color: 'primary.main' }} />
+                  <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                      {invoice.invoiceNumber}
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                      Émise le{' '}
+                      {new Date(invoice.issuedAt).toLocaleDateString('fr-FR', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                      })}
+                    </Typography>
+                  </Box>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                    {invoice.amountTtc.toLocaleString('fr-FR')} € TTC
+                  </Typography>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<DownloadIcon />}
+                    onClick={() => handleDownloadInvoice(invoice)}
+                  >
+                    PDF
+                  </Button>
+                </Paper>
+              ))}
+            </Box>
           )}
         </TabPanel>
       </Container>
@@ -567,11 +662,11 @@ export default function Account() {
               </Grid>
               <Grid size={{ xs: 12, sm: 4 }}>
                 <TextField
-                  {...addressForm.register('zipCode')}
+                  {...addressForm.register('postalCode')}
                   label="Code postal"
                   fullWidth
-                  error={!!addressForm.formState.errors.zipCode}
-                  helperText={addressForm.formState.errors.zipCode?.message}
+                  error={!!addressForm.formState.errors.postalCode}
+                  helperText={addressForm.formState.errors.postalCode?.message}
                 />
               </Grid>
               <Grid size={{ xs: 12, sm: 8 }}>
@@ -601,9 +696,9 @@ export default function Account() {
             type="submit"
             form="address-form"
             variant="contained"
-            disabled={addressForm.formState.isSubmitting}
+            disabled={createAddress.isPending}
           >
-            {addressForm.formState.isSubmitting ? (
+            {createAddress.isPending ? (
               <CircularProgress size={20} color="inherit" />
             ) : (
               'Ajouter'

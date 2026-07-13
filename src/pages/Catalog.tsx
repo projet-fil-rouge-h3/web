@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   Box,
@@ -8,36 +8,43 @@ import {
   Chip,
   TextField,
   InputAdornment,
+  Skeleton,
+  Alert,
 } from '@mui/material'
 import SearchIcon from '@mui/icons-material/Search'
+import { useQuery } from '@tanstack/react-query'
 import ProductCard from '@/components/ui/ProductCard'
-import { MOCK_CATEGORIES, MOCK_PRODUCTS } from '@/data/mock'
+import { catalogApi } from '@/services/catalog'
+import { useDebounce } from '@/hooks/useDebounce'
 
 export default function Catalog() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [search, setSearch] = useState('')
+  const debouncedSearch = useDebounce(search, 300)
 
   const activeSlug = searchParams.get('cat') ?? 'all'
 
-  const filtered = useMemo(() => {
-    let list = MOCK_PRODUCTS
+  const { data: categories = [] } = useQuery({
+    queryKey: ['categories'],
+    queryFn: catalogApi.getCategories,
+  })
 
-    if (activeSlug !== 'all') {
-      const cat = MOCK_CATEGORIES.find((c) => c.slug === activeSlug)
-      if (cat) list = list.filter((p) => p.categoryId === cat.id)
-    }
+  const activeCategory = categories.find((c) => c.slug === activeSlug)
 
-    const q = search.trim().toLowerCase()
-    if (q) {
-      list = list.filter(
-        (p) =>
-          p.name.toLowerCase().includes(q) ||
-          p.shortDescription.toLowerCase().includes(q)
-      )
-    }
+  const {
+    data: productsPage,
+    isLoading,
+    isError,
+  } = useQuery({
+    queryKey: ['products', { q: debouncedSearch, categoryId: activeCategory?.id }],
+    queryFn: () =>
+      catalogApi.searchProducts({
+        q: debouncedSearch || undefined,
+        categoryId: activeCategory?.id,
+      }),
+  })
 
-    return list
-  }, [activeSlug, search])
+  const products = productsPage?.content ?? []
 
   const handleCategory = (slug: string) => {
     setSearch('')
@@ -85,7 +92,7 @@ export default function Catalog() {
               color={activeSlug === 'all' ? 'primary' : 'default'}
               variant={activeSlug === 'all' ? 'filled' : 'outlined'}
             />
-            {MOCK_CATEGORIES.map((cat) => (
+            {categories.map((cat) => (
               <Chip
                 key={cat.id}
                 label={cat.name}
@@ -114,31 +121,48 @@ export default function Catalog() {
           />
         </Box>
 
+        {/* Erreur API */}
+        {isError && (
+          <Alert severity="error" sx={{ mb: 4 }}>
+            Impossible de charger le catalogue. Vérifiez que le serveur est démarré puis réessayez.
+          </Alert>
+        )}
+
         {/* Grille produits */}
-        {filtered.length > 0 ? (
+        {isLoading ? (
           <Grid container spacing={3}>
-            {filtered.map((product) => (
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Grid key={i} size={{ xs: 12, sm: 6, md: 4 }}>
+                <Skeleton variant="rounded" height={320} />
+              </Grid>
+            ))}
+          </Grid>
+        ) : products.length > 0 ? (
+          <Grid container spacing={3}>
+            {products.map((product) => (
               <Grid key={product.id} size={{ xs: 12, sm: 6, md: 4 }}>
                 <ProductCard product={product} />
               </Grid>
             ))}
           </Grid>
         ) : (
-          <Box sx={{ textAlign: 'center', py: 12 }}>
-            <Typography variant="h6" sx={{ color: 'text.secondary', mb: 1 }}>
-              Aucun produit trouvé
-            </Typography>
-            <Typography variant="body2" sx={{ color: 'text.disabled' }}>
-              Essayez un autre terme ou sélectionnez une autre catégorie.
-            </Typography>
-          </Box>
+          !isError && (
+            <Box sx={{ textAlign: 'center', py: 12 }}>
+              <Typography variant="h6" sx={{ color: 'text.secondary', mb: 1 }}>
+                Aucun produit trouvé
+              </Typography>
+              <Typography variant="body2" sx={{ color: 'text.disabled' }}>
+                Essayez un autre terme ou sélectionnez une autre catégorie.
+              </Typography>
+            </Box>
+          )
         )}
 
         {/* Nombre de résultats */}
-        {filtered.length > 0 && (
+        {products.length > 0 && (
           <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mt: 4 }}>
-            {filtered.length} produit{filtered.length > 1 ? 's' : ''} affiché
-            {filtered.length > 1 ? 's' : ''}
+            {productsPage?.totalElements} produit{(productsPage?.totalElements ?? 0) > 1 ? 's' : ''} affiché
+            {(productsPage?.totalElements ?? 0) > 1 ? 's' : ''}
           </Typography>
         )}
       </Container>

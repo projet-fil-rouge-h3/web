@@ -1,10 +1,12 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { ThemeProvider, CssBaseline } from '@mui/material'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { theme } from '@/design-system/theme'
 import PageLayout from '@/components/layout/PageLayout'
 import { Box, CircularProgress } from '@mui/material'
+import { useAuthStore } from '@/stores/authStore'
+import { authApi } from '@/services/auth'
 
 const Home = lazy(() => import('@/pages/Home'))
 const Catalog = lazy(() => import('@/pages/Catalog'))
@@ -14,6 +16,7 @@ const Contact = lazy(() => import('@/pages/Contact'))
 const Login = lazy(() => import('@/pages/Login'))
 const Register = lazy(() => import('@/pages/Register'))
 const Account = lazy(() => import('@/pages/Account'))
+const Admin = lazy(() => import('@/pages/Admin'))
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -33,6 +36,14 @@ function PageFallback() {
 }
 
 function App() {
+  // L'access token vit en mémoire : après un rechargement de page, on le
+  // regénère depuis le cookie HttpOnly si une session était active.
+  useEffect(() => {
+    if (useAuthStore.getState().isAuthenticated) {
+      void authApi.restoreSession()
+    }
+  }, [])
+
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider theme={theme}>
@@ -49,6 +60,7 @@ function App() {
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
                 <Route path="/account" element={<Account />} />
+                <Route path="/admin" element={<Admin />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>
             </Routes>

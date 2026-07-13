@@ -23,7 +23,10 @@ import {
 } from '@mui/icons-material'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import Alert from '@mui/material/Alert'
 import { useCartStore } from '@/stores/cartStore'
+import { useAuthStore } from '@/stores/authStore'
+import { ordersApi } from '@/services/orders'
 
 const BILLING_LABEL: Record<string, string> = {
   MONTHLY: 'Mensuel',
@@ -31,16 +34,57 @@ const BILLING_LABEL: Record<string, string> = {
   ONE_TIME: 'Unique',
 }
 
+const VAT_RATE = 0.2
+
 export default function Cart() {
   const navigate = useNavigate()
   const { items, removeItem, updateQuantity, clearCart, total } = useCartStore()
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [ordered, setOrdered] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const handleOrder = () => {
-    setConfirmOpen(false)
-    setOrdered(true)
-    clearCart()
+  // Les prix catalogue sont HT ; la TVA est ajoutée au moment de la commande
+  const totalHT = total()
+  const vat = Math.round(totalHT * VAT_RATE * 100) / 100
+  const totalTTC = totalHT + vat
+
+  const handleCheckoutClick = () => {
+    if (!isAuthenticated) {
+      navigate('/login')
+      return
+    }
+    setError(null)
+    setConfirmOpen(true)
+  }
+
+  const handleOrder = async () => {
+    setSubmitting(true)
+    setError(null)
+    try {
+      await ordersApi.createOrder(
+        items.map((item) => ({
+          productId: item.productId,
+          productName: item.name,
+          quantity: item.quantity,
+          unitPrice: item.price,
+          billingPeriod: item.billingCycle,
+        }))
+      )
+      setConfirmOpen(false)
+      setOrdered(true)
+      clearCart()
+    } catch (e) {
+      setConfirmOpen(false)
+      setError(
+        e instanceof Error && e.message !== 'Erreur inconnue'
+          ? e.message
+          : 'La commande a échoué. Vérifiez votre connexion puis réessayez.'
+      )
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   if (ordered) {
@@ -257,24 +301,42 @@ export default function Cart() {
 
               <Divider sx={{ my: 2 }} />
 
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  Total HT
+                </Typography>
+                <Typography variant="body2">{totalHT.toLocaleString('fr-FR')} €</Typography>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  TVA (20 %)
+                </Typography>
+                <Typography variant="body2">{vat.toLocaleString('fr-FR')} €</Typography>
+              </Box>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
                 <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                  Total
+                  Total TTC
                 </Typography>
                 <Typography variant="subtitle1" sx={{ fontWeight: 700, color: 'primary.main' }}>
-                  {total().toLocaleString('fr-FR')} €/mois
+                  {totalTTC.toLocaleString('fr-FR')} €
                 </Typography>
               </Box>
+
+              {error && (
+                <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+                  {error}
+                </Alert>
+              )}
 
               <Button
                 variant="contained"
                 size="large"
                 fullWidth
                 endIcon={<ArrowForwardIcon />}
-                onClick={() => setConfirmOpen(true)}
+                onClick={handleCheckoutClick}
                 sx={{ mb: 1.5 }}
               >
-                Passer la commande
+                {isAuthenticated ? 'Passer la commande' : 'Se connecter pour commander'}
               </Button>
 
               <Button
@@ -297,15 +359,18 @@ export default function Cart() {
             Vous allez commander {items.length} produit{items.length > 1 ? 's' : ''} pour un total
             de{' '}
             <Box component="span" sx={{ fontWeight: 700, color: 'primary.main' }}>
-              {total().toLocaleString('fr-FR')} €/mois
-            </Box>
-            .
+              {totalTTC.toLocaleString('fr-FR')} € TTC
+            </Box>{' '}
+            ({totalHT.toLocaleString('fr-FR')} € HT). Paiement simulé — aucune carte bancaire
+            requise.
           </Typography>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 3, gap: 1 }}>
-          <Button onClick={() => setConfirmOpen(false)}>Annuler</Button>
-          <Button variant="contained" onClick={handleOrder}>
-            Confirmer
+          <Button onClick={() => setConfirmOpen(false)} disabled={submitting}>
+            Annuler
+          </Button>
+          <Button variant="contained" onClick={handleOrder} disabled={submitting}>
+            {submitting ? 'Commande en cours…' : 'Confirmer'}
           </Button>
         </DialogActions>
       </Dialog>

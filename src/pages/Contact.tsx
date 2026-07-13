@@ -23,6 +23,7 @@ import PhoneIcon from '@mui/icons-material/Phone'
 import LocationOnIcon from '@mui/icons-material/LocationOn'
 import HeadsetMicIcon from '@mui/icons-material/HeadsetMic'
 import type { ReactNode } from 'react'
+import { api } from '@/services/api'
 
 const schema = z.object({
   firstName: z.string().min(2, 'Prénom requis (min. 2 caractères)'),
@@ -70,9 +71,8 @@ export default function Contact() {
     reset,
   } = useForm<FormData>({ resolver: zodResolver(schema) })
 
-  const onSubmit = async (_data: FormData) => {
-    // Envoi simulé — remplacer par api.post('/contact', data) quand le backend est prêt
-    await new Promise((resolve) => setTimeout(resolve, 700))
+  const onSubmit = async (data: FormData) => {
+    await api.post<void>('/contact', data)
     setSuccess(true)
     reset()
   }

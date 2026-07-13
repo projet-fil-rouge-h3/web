@@ -20,6 +20,7 @@ import VisibilityIcon from '@mui/icons-material/Visibility'
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff'
 import SecurityIcon from '@mui/icons-material/Security'
 import { Link, useNavigate } from 'react-router-dom'
+import { authApi } from '@/services/auth'
 
 const schema = z
   .object({
@@ -50,15 +51,23 @@ export default function Register() {
     formState: { errors, isSubmitting },
   } = useForm<FormData>({ resolver: zodResolver(schema) })
 
-  const onSubmit = async (_data: FormData) => {
+  const onSubmit = async (data: FormData) => {
     setError(null)
     try {
-      // Inscription simulée — remplacer par api.post('/auth/register', data) quand le backend est prêt
-      await new Promise((resolve) => setTimeout(resolve, 700))
+      await authApi.register({
+        email: data.email,
+        password: data.password,
+        firstName: data.firstName,
+        lastName: data.lastName,
+      })
       setSuccess(true)
-      setTimeout(() => navigate('/login'), 2000)
-    } catch {
-      setError('Une erreur est survenue. Veuillez réessayer.')
+      setTimeout(() => navigate('/'), 1500)
+    } catch (e) {
+      setError(
+        e instanceof Error && e.message.includes('déjà utilisé')
+          ? 'Un compte existe déjà avec cette adresse e-mail.'
+          : 'Une erreur est survenue. Veuillez réessayer.'
+      )
     }
   }
 
