@@ -34,7 +34,8 @@ export default function Header() {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
   const navigate = useNavigate()
   const cartItems = useCartStore((s) => s.items)
-  const { isAuthenticated } = useAuthStore()
+  const { isAuthenticated, user } = useAuthStore()
+  const isAdmin = isAuthenticated && user?.role === 'ADMIN'
 
   const cartCount = cartItems.reduce((acc, i) => acc + i.quantity, 0)
 
@@ -99,6 +100,21 @@ export default function Header() {
                 <ShoppingCartIcon />
               </Badge>
             </IconButton>
+
+            {!isMobile && isAdmin && (
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={() => navigate('/admin')}
+                sx={{
+                  color: 'white',
+                  borderColor: 'rgba(255,255,255,0.4)',
+                  '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.06)' },
+                }}
+              >
+                Admin
+              </Button>
+            )}
 
             {!isMobile && (
               isAuthenticated ? (

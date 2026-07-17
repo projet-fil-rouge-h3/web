@@ -1,17 +1,26 @@
+export interface CategorySummary {
+  id: string
+  name: string
+  slug: string
+}
+
 export interface Product {
   id: string
-  categoryId: string
+  /** Présent dans les données mock ; l'API renvoie `category` à la place. */
+  categoryId?: string
+  category?: CategorySummary
   name: string
   slug: string
   description: string
-  shortDescription: string
+  shortDescription?: string
   priceMonthly: number
   priceYearly?: number
   imageUrl?: string
   features: Record<string, unknown>
   displayPriority: number
   active: boolean
-  createdAt: string
+  /** Non exposé par le backend Symfony actuel. */
+  createdAt?: string
 }
 
 export interface Category {
@@ -20,7 +29,8 @@ export interface Category {
   slug: string
   description?: string
   imageUrl?: string
-  displayOrder: number
+  /** Non exposé par le backend Symfony actuel. */
+  displayOrder?: number
   active: boolean
 }
 
