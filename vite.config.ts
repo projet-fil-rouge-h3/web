@@ -12,8 +12,10 @@ export default defineConfig({
   server: {
     port: 3000,
     proxy: {
+      // Backend Symfony (symfony serve --port=8000).
+      // Attention : l'ancienne stack Spring occupe encore le port 8080.
       '/api': {
-        target: 'http://localhost:8080',
+        target: 'http://localhost:8000',
         changeOrigin: true,
       },
     },

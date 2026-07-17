@@ -112,9 +112,9 @@ export default function Account() {
   const [addressDialogOpen, setAddressDialogOpen] = useState(false)
 
   // ── Données serveur (chargées seulement si connecté) ───────────
-  const { data: ordersPage, isLoading: ordersLoading } = useQuery({
+  const { data: ordersData, isLoading: ordersLoading } = useQuery({
     queryKey: ['orders', 'mine'],
-    queryFn: () => ordersApi.getMyOrders(0, 20),
+    queryFn: ordersApi.getMyOrders,
     enabled: isAuthenticated,
   })
 
@@ -178,7 +178,7 @@ export default function Account() {
   }
 
   const initials = `${user.firstName[0]}${user.lastName[0]}`.toUpperCase()
-  const orders = ordersPage?.content ?? []
+  const orders = ordersData ?? []
   const invoices = invoicesPage?.content ?? []
 
   const onProfileSubmit = async (data: ProfileData) => {
@@ -398,7 +398,7 @@ export default function Account() {
                   >
                     <Box>
                       <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                        Commande {order.id.slice(0, 8).toUpperCase()}
+                        Commande #{String(order.id).padStart(6, '0')}
                       </Typography>
                       <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                         {new Date(order.createdAt).toLocaleDateString('fr-FR', {

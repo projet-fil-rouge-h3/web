@@ -23,6 +23,7 @@ import {
 } from '@mui/icons-material'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import Alert from '@mui/material/Alert'
 import { useCartStore } from '@/stores/cartStore'
 import { useAuthStore } from '@/stores/authStore'
@@ -38,6 +39,7 @@ const VAT_RATE = 0.2
 
 export default function Cart() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { items, removeItem, updateQuantity, clearCart, total } = useCartStore()
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const [confirmOpen, setConfirmOpen] = useState(false)
@@ -75,6 +77,9 @@ export default function Cart() {
       setConfirmOpen(false)
       setOrdered(true)
       clearCart()
+      // La nouvelle commande apparaît sans F5 dans le profil et le back-office
+      void queryClient.invalidateQueries({ queryKey: ['orders', 'mine'] })
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'orders'] })
     } catch (e) {
       setConfirmOpen(false)
       setError(

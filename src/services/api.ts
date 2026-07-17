@@ -1,8 +1,11 @@
+import { useAuthStore } from '@/stores/authStore'
+
 const BASE_URL = import.meta.env.VITE_API_URL ?? '/api'
 
 /**
  * Access token conservé en mémoire uniquement (jamais en localStorage : XSS).
- * Le refresh token vit dans un cookie HttpOnly géré par le serveur.
+ * Le backend Symfony n'expose pas de refresh token : la session dure le temps
+ * de vie du JWT (1 h par défaut) et ne survit pas à un rechargement de page.
  */
 let accessToken: string | null = null
 
@@ -14,23 +17,7 @@ export function getAccessToken() {
   return accessToken
 }
 
-/** Tente de renouveler l'access token via le cookie HttpOnly. */
-async function tryRefresh(): Promise<boolean> {
-  try {
-    const response = await fetch(`${BASE_URL}/auth/refresh`, {
-      method: 'POST',
-      credentials: 'include',
-    })
-    if (!response.ok) return false
-    const data = (await response.json()) as { accessToken: string }
-    accessToken = data.accessToken
-    return true
-  } catch {
-    return false
-  }
-}
-
-async function request<T>(path: string, options?: RequestInit, retry = true): Promise<T> {
+async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options?.headers as Record<string, string>),
@@ -40,16 +27,14 @@ async function request<T>(path: string, options?: RequestInit, retry = true): Pr
   }
 
   const response = await fetch(`${BASE_URL}${path}`, {
-    credentials: 'include',
     ...options,
     headers,
   })
 
-  // Access token expiré (15 min) : un seul essai de refresh puis rejeu de la requête
-  if (response.status === 401 && retry && !path.startsWith('/auth/')) {
-    if (await tryRefresh()) {
-      return request<T>(path, options, false)
-    }
+  // JWT expiré ou invalide : on purge la session locale, l'UI repasse en mode déconnecté
+  if (response.status === 401 && accessToken) {
+    setAccessToken(null)
+    useAuthStore.getState().logout()
   }
 
   if (!response.ok) {

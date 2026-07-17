@@ -24,7 +24,6 @@ export const invoicesApi = {
   downloadPdf: async (invoice: Invoice) => {
     const response = await fetch(`${BASE_URL}/invoices/${invoice.id}/pdf`, {
       headers: { Authorization: `Bearer ${getAccessToken()}` },
-      credentials: 'include',
     })
     if (!response.ok) {
       throw new Error(`Téléchargement impossible (HTTP ${response.status})`)

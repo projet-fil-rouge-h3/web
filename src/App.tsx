@@ -36,8 +36,9 @@ function PageFallback() {
 }
 
 function App() {
-  // L'access token vit en mémoire : après un rechargement de page, on le
-  // regénère depuis le cookie HttpOnly si une session était active.
+  // L'access token vit en mémoire et le backend n'a pas de refresh token :
+  // au rechargement de page, on purge l'état de session persisté (localStorage)
+  // pour que l'UI ne se croie pas connectée sans token valide.
   useEffect(() => {
     if (useAuthStore.getState().isAuthenticated) {
       void authApi.restoreSession()

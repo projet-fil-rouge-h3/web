@@ -19,7 +19,8 @@ export interface Product {
   features: Record<string, unknown>
   displayPriority: number
   active: boolean
-  createdAt: string
+  /** Non exposé par le backend Symfony actuel. */
+  createdAt?: string
 }
 
 export interface Category {
@@ -28,7 +29,8 @@ export interface Category {
   slug: string
   description?: string
   imageUrl?: string
-  displayOrder: number
+  /** Non exposé par le backend Symfony actuel. */
+  displayOrder?: number
   active: boolean
 }
 

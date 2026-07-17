@@ -10,19 +10,35 @@ export interface OrderItemPayload {
   billingPeriod: BillingPeriod
 }
 
+/** Statuts posés par le backend Symfony (VALIDATED = statut par défaut à la création). */
+export type OrderStatus =
+  | 'PENDING'
+  | 'VALIDATED'
+  | 'CONFIRMED'
+  | 'PROCESSING'
+  | 'COMPLETED'
+  | 'CANCELLED'
+  | 'REFUNDED'
+
 export interface OrderResponse {
-  id: string
-  userId: string
-  status: 'PENDING' | 'CONFIRMED' | 'PROCESSING' | 'COMPLETED' | 'CANCELLED' | 'REFUNDED'
+  /** id numérique côté Symfony — passer par String() pour l'affichage. */
+  id: number
+  status: OrderStatus
+  /** Client de la commande (affiché dans le back-office). */
+  user?: {
+    id: number
+    email: string
+    firstName: string
+    lastName: string
+  }
   totalAmount: number
   currency: string
   items: Array<{
-    id: string
-    productId: string
+    id: number
     productName: string
     quantity: number
     unitPrice: number
-    billingPeriod: BillingPeriod
+    billingPeriod: string
   }>
   createdAt: string
 }
@@ -31,8 +47,6 @@ export const ordersApi = {
   createOrder: (items: OrderItemPayload[]) =>
     api.post<OrderResponse>('/orders', { items }),
 
-  getMyOrders: (page = 0, size = 10) =>
-    api.get<{ content: OrderResponse[]; totalElements: number }>(
-      `/orders?page=${page}&size=${size}`
-    ),
+  /** Le backend renvoie un tableau nu (pas de pagination sur cette route). */
+  getMyOrders: () => api.get<OrderResponse[]>('/orders'),
 }
